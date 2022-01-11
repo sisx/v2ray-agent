@@ -645,32 +645,24 @@ initTLSNginxConfig() {
 		initTLSNginxConfig
 	else
 		# 修改配置
+		echoContent green "\n ---> 配置Nginx"
 		touch /etc/nginx/conf.d/alone.conf
-		cat <<EOF >/etc/nginx/conf.d/alone.conf
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${domain};
-    root /usr/share/nginx/html;
-    location ~ /.well-known {
-    	allow all;
-    }
-    location /test {
-    	return 200 'fjkvymb6len';
-    }
-	location /ip {
-		proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header REMOTE-HOST \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-		default_type text/plain;
-		return 200 \$proxy_add_x_forwarded_for;
-	}
-}
-EOF
+		echo "server {listen 80;listen [::]:80;server_name ${domain};root /usr/share/nginx/html;location ~ /.well-known {allow all;}location /test {return 200 'fjkvymb6len';}}" >/etc/nginx/conf.d/alone.conf
 		# 启动nginx
 		handleNginx start
+		echoContent yellow "\n检查IP是否设置为当前VPS"
 		checkIP
+		# 测试nginx
+		echoContent yellow "\n检查Nginx是否正常访问"
+		sleep 0.5
+		domainResult=$(curl -s "${domain}/test" | grep fjkvymb6len)
+		if [[ -n ${domainResult} ]]; then
+			handleNginx stop
+			echoContent green "\n ---> Nginx配置成功"
+		else
+			echoContent red " ---> 无法正常访问服务器，请检测域名是否正确、域名的DNS解析以及防火墙设置是否正确--->"
+			exit 0
+		fi
 	fi
 }
 
@@ -678,169 +670,82 @@ EOF
 updateRedirectNginxConf() {
 
 	cat <<EOF >/etc/nginx/conf.d/alone.conf
-server {
-	listen 80;
-	listen [::]:80;
-	server_name ${domain};
-	# shellcheck disable=SC2154
-	return 301 https://${domain}$request_uri;
-}
-server {
-		listen 127.0.0.1:31300;
-		server_name _;
-		return 403;
-}
-EOF
-if [[ -n $(echo "${selectCustomInstallType}" |grep 2) && -n $(echo "${selectCustomInstallType}" |grep 5) ]] || [[ -z "${selectCustomInstallType}" ]];then
-
-		cat <<EOF >>/etc/nginx/conf.d/alone.conf
-server {
-	listen 127.0.0.1:31302 http2;
-	server_name ${domain};
-	root /usr/share/nginx/html;
-	location /s/ {
-    		add_header Content-Type text/plain;
-    		alias /etc/v2ray-agent/subscribe/;
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name ${domain};
+        # shellcheck disable=SC2154
+        return 301 https://${domain}$request_uri;
     }
-
-    location /${currentPath}grpc {
-		client_max_body_size 0;
-#		keepalive_time 1071906480m;
-		keepalive_requests 4294967296;
-		client_body_timeout 1071906480m;
- 		send_timeout 1071906480m;
- 		lingering_close always;
- 		grpc_read_timeout 1071906480m;
- 		grpc_send_timeout 1071906480m;
-		grpc_pass grpc://127.0.0.1:31301;
-	}
-
-	location /${currentPath}trojangrpc {
-		client_max_body_size 0;
-		# keepalive_time 1071906480m;
-		keepalive_requests 4294967296;
-		client_body_timeout 1071906480m;
- 		send_timeout 1071906480m;
- 		lingering_close always;
- 		grpc_read_timeout 1071906480m;
- 		grpc_send_timeout 1071906480m;
-		grpc_pass grpc://127.0.0.1:31304;
-	}
-}
-EOF
-	elif echo "${selectCustomInstallType}" |grep -q 5 || [[ -z "${selectCustomInstallType}" ]]; then
-		cat <<EOF >>/etc/nginx/conf.d/alone.conf
-server {
-	listen 127.0.0.1:31302 http2;
-	server_name ${domain};
-	root /usr/share/nginx/html;
-	location /s/ {
-    		add_header Content-Type text/plain;
-    		alias /etc/v2ray-agent/subscribe/;
-    }
-	location /${currentPath}grpc {
-		client_max_body_size 0;
-#		keepalive_time 1071906480m;
-		keepalive_requests 4294967296;
-		client_body_timeout 1071906480m;
- 		send_timeout 1071906480m;
- 		lingering_close always;
- 		grpc_read_timeout 1071906480m;
- 		grpc_send_timeout 1071906480m;
-		grpc_pass grpc://127.0.0.1:31301;
-	}
-}
 EOF
 
-	elif echo "${selectCustomInstallType}" |grep -q 2 || [[ -z "${selectCustomInstallType}" ]];then
-
+	if [[ "${debianVersion}" == "8" ]]; then
 		cat <<EOF >>/etc/nginx/conf.d/alone.conf
-server {
-	listen 127.0.0.1:31302 http2;
-	server_name ${domain};
-	root /usr/share/nginx/html;
-	location /s/ {
-    		add_header Content-Type text/plain;
-    		alias /etc/v2ray-agent/subscribe/;
+        server {
+        listen 31300;
+        server_name ${domain};
+        root /usr/share/nginx/html;
+        location /s/ {
+        	add_header Content-Type text/plain;
+        	alias /etc/v2ray-agent/subscribe/;
+        }
+        # location / {
+        #   add_header Strict-Transport-Security "max-age=63072000" always;
+        # }
+#       location ~ /.well-known {allow all;}
+#       location /test {return 200 'fjkvymb6len';}
     }
-	location /${currentPath}trojangrpc {
-		client_max_body_size 0;
-		# keepalive_time 1071906480m;
-		keepalive_requests 4294967296;
-		client_body_timeout 1071906480m;
- 		send_timeout 1071906480m;
- 		lingering_close always;
- 		grpc_read_timeout 1071906480m;
- 		grpc_send_timeout 1071906480m;
-		grpc_pass grpc://127.0.0.1:31301;
-	}
-}
 EOF
 	else
-
 		cat <<EOF >>/etc/nginx/conf.d/alone.conf
-server {
-	listen 127.0.0.1:31302 http2;
-	server_name ${domain};
-	root /usr/share/nginx/html;
-	location /s/ {
-    		add_header Content-Type text/plain;
-    		alias /etc/v2ray-agent/subscribe/;
-    }
-	location / {
-	}
-}
+        server {
+            listen 31300;
+            server_name ${domain};
+            root /usr/share/nginx/html;
+            location /s/ {
+            	add_header Content-Type text/plain;
+        		alias /etc/v2ray-agent/subscribe/;
+        	}
+            location / {
+                add_header Strict-Transport-Security "max-age=63072000" always;
+            }
+    #       location ~ /.well-known {allow all;}
+    #       location /test {return 200 'fjkvymb6len';}
+        }
 EOF
 	fi
-
-	cat <<EOF >>/etc/nginx/conf.d/alone.conf
-server {
-	listen 127.0.0.1:31300;
-	server_name ${domain};
-	root /usr/share/nginx/html;
-	location /s/ {
-		add_header Content-Type text/plain;
-		alias /etc/v2ray-agent/subscribe/;
-	}
-	location / {
-		add_header Strict-Transport-Security "max-age=15552000; preload" always;
-	}
-}
-EOF
 
 }
 
 # 检查ip
 checkIP() {
-	echoContent skyBlue "\n ---> 检查域名ip中"
-	localIP=$(curl -s -m 2 "${domain}/ip")
-	handleNginx stop
-	if [[ -z ${localIP} ]] || ! echo "${localIP}"|sed '1{s/[^(]*(//;s/).*//;q}'|grep -q '\.' && ! echo "${localIP}"|sed '1{s/[^(]*(//;s/).*//;q}'|grep -q ':';then
-		echoContent red "\n ---> 未检测到当前域名的ip"
-		echoContent yellow " ---> 请检查域名是否书写正确"
-		echoContent yellow " ---> 请检查域名dns解析是否正确"
-		echoContent yellow " ---> 如解析正确，请等待dns生效，预计三分钟内生效"
-		echoContent yellow " ---> 如以上设置都正确，请重新安装纯净系统后再次尝试"
-		if [[ -n ${localIP} ]];then
-			echoContent yellow " ---> 检测返回值异常"
-		fi
-		echoContent red " ---> 请检查防火墙是否关闭\n"
-		read -r -p "是否通过脚本关闭防火墙？[y/n]:" disableFirewallStatus
-		if [[ ${disableFirewallStatus} == "y" ]];then
-			handleFirewall stop
-		fi
+	echoContent skyBlue " ---> 检查ipv4中"
+	local pingIP=$(curl -s -H 'accept:application/dns-json' 'https://cloudflare-dns.com/dns-query?name='${domain}'&type=A' | jq -r ".Answer|.[]|select(.type==1)|.data")
 
-		exit 0;
+	if [[ -z "${pingIP}" ]]; then
+		echoContent skyBlue " ---> 检查ipv6中"
+		pingIP=$(curl -s -H 'accept:application/dns-json' 'https://cloudflare-dns.com/dns-query?name='${domain}'&type=AAAA' | jq -r ".Answer|.[]|select(.type==28)|.data")
+		pingIPv6=${pingIP}
 	fi
 
-	if echo "${localIP}"|awk -F "[,]" '{print $2}'|grep -q "." || echo "${localIP}"|awk -F "[,]" '{print $2}'|grep -q ":";then
-		echoContent red "\n ---> 检测到多个ip，请确认是否关闭cloudflare的云朵"
-		echoContent yellow " ---> 关闭云朵后等待三分钟后重试"
-		echoContent yellow " ---> 检测到的ip如下：[${localIP}]"
-		exit 0;
+	if [[ -n "${pingIP}" ]]; then
+		echo
+		read -r -p "当前域名的IP为 [${pingIP}]，是否正确[y/n]？" domainStatus
+		if [[ "${domainStatus}" == "y" ]]; then
+			echoContent green "\n ---> IP确认完成"
+		else
+			echoContent red "\n ---> 1.检查Cloudflare DNS解析是否正常"
+			echoContent red " ---> 2.检查Cloudflare DNS云朵是否为灰色\n"
+			exit 0
+		fi
+	else
+		read -r -p "IP查询失败，是否重试[y/n]？" retryStatus
+		if [[ "${retryStatus}" == "y" ]]; then
+			checkIP
+		else
+			exit 0
+		fi
 	fi
-
-	echoContent green " ---> 当前域名ip为：[${localIP}]"
 }
 # 安装TLS
 installTLS() {
